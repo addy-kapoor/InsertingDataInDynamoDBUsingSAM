@@ -1,0 +1,109 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SAM template to create a DynamoDB table and connect it with Lambda
+
+Globals:
+  Function:
+    Timeout: 10
+    MemorySize: 128
+    Tracing: Active
+    LoggingConfig:
+      LogFormat: JSON
+  Api:
+    TracingEnabled: true
+
+Resources:
+  # Define the DynamoDB Table
+  UsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: UsersTable
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+
+  
+  # New Advanced DynamoDB Table
+  AdvancedUsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: AdvancedUsersTable
+      BillingMode: PROVISIONED
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: GSI1PK
+          AttributeType: S
+        - AttributeName: GSI1SK
+          AttributeType: N
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - AttributeName: GSI1PK
+              KeyType: HASH
+            - AttributeName: GSI1SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: INCLUDE
+            NonKeyAttributes:
+              - userEmail
+              - userStatus
+          ProvisionedThroughput:
+            ReadCapacityUnits: 5
+            WriteCapacityUnits: 5
+
+
+  # Define the Lambda function that inserts data into the DynamoDB table
+  InsertUserFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: insert_user/
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      Architectures:
+        - x86_64
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref UsersTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+      Events:
+        CreateUserApi:
+          Type: Api
+          Properties:
+            Path: /createUsers
+            Method: post
+
+Outputs:
+  UsersTableName:
+    Description: Name of the existing DynamoDB table
+    Value: !Ref UsersTable
+  AdvancedUsersTable:
+    Description: Name of the new DynamoDB table
+    Value: !Ref AdvancedUsersTable
+  CreateUserApi:
+    Description: API Gateway endpoint URL for creating users
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/createUsers/"
+  InsertUserFunction:
+    Description: Insert User Lambda Function ARN
+    Value: !GetAtt InsertUserFunction.Arn
+  InsertUserFunctionIamRole:
+    Description: Implicit IAM Role created for Insert User function
+    Value: !GetAtt InsertUserFunctionRole.Arn
